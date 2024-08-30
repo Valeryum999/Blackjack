@@ -8,6 +8,7 @@ class Blackjack:
     def __init__(self,balance=0,automatic=False):
         self.balance = balance
         self.original_balance = self.balance
+        self.bust = False
         self.hand = []
         self.second_hand = []
         self.dealers_hand = []
@@ -25,7 +26,6 @@ class Blackjack:
 
     def deposit(self):
         if self.automatic:
-            self.balance = 100
             return
         while(True):
             amount = input("How much do you want to deposit? $")
@@ -35,12 +35,16 @@ class Blackjack:
                     print("Please enter a valid amount.")
                 else:
                     self.balance = amount
+                    return
             else:
                 print("Please enter a number.")
 
-    def control_bet(self,balance,auto_bet,true_count):
-        if auto_bet:
-            bet = max(5,5*true_count)
+    def control_bet(self):
+        if self.auto_bet:
+            bet = max(5,5*self.true_count)
+            if bet > self.balance:
+                self.bust = True
+                return 0
             return bet
         while(True):
             bet = input("How much do you want to bet? $")
@@ -82,6 +86,7 @@ class Blackjack:
         hand.append(self.deck.pop())
 
     def sum_of_hand(self,hand):
+        isSoft = False
         sum = 0
         numberOfAces = 0
         for card in hand:
@@ -94,10 +99,30 @@ class Blackjack:
         while numberOfAces>0:
             if sum + 11 <= 21:
                 sum += 11
+                isSoft = True
             else:
                 sum+=1
             numberOfAces-=1
         return sum
+    
+    def get_soft(self,hand):
+        sum = 0
+        numberOfAces = 0
+        for card in hand:
+            if card[0] in not_tens and not "10" in card[0:2]:
+                sum += int(card[0])
+            elif card[0]=='A':
+                numberOfAces += 1
+            else:
+                sum += 10
+        while numberOfAces>0:
+            if sum + 11 <= 21:
+                sum += 11
+                return True
+            else:
+                sum+=1
+            numberOfAces-=1
+        return False
 
     def count(self,hand):
         count = 0
@@ -128,56 +153,69 @@ class Blackjack:
 
 
     def correct_move(self,dealers_hand,my_hand):
-        sum_of_dealers_hand = self.sum_of_hand(dealers_hand)
+        sum_of_dealers_hand = self.sum_of_hand([dealers_hand[0]])
         sum_of_my_hand = self.sum_of_hand(my_hand)
+        canDouble = len(my_hand) == 2
         # da implementare gli assi e gli split
         if self.check_double(my_hand):
             if "A" in my_hand[0] or "8" in my_hand[0] or "9" in my_hand[0]:
                 return 'split'
-
-        if "A" in my_hand[0] or "A" in my_hand[1]:
+            
+        if self.get_soft(my_hand):
             if sum_of_my_hand >= 19:
-                return 'stay'
+                return 'stand'
             elif sum_of_my_hand == 18:
                 if sum_of_dealers_hand < 7:
-                    return 'double'
+                    if canDouble:
+                        return 'double'
+                    else:
+                        return 'stand'
                 elif sum_of_dealers_hand < 9:
-                    return 'stay'
+                    return 'stand'
                 else:
                     return 'hit'
             elif sum_of_my_hand == 17:
                 if sum_of_dealers_hand == 2:
                     return 'hit'
                 elif sum_of_dealers_hand < 7:
-                    return 'double'
+                    if canDouble:
+                        return 'double'
+                    else:
+                        return 'hit'
                 else:
                     return 'hit'
             elif sum_of_my_hand == 16 or sum_of_my_hand == 15:
                 if sum_of_dealers_hand < 4:
                     return 'hit'
                 elif sum_of_dealers_hand < 7:
-                    return 'double'
+                    if canDouble:
+                        return 'double'
+                    else:
+                        return 'hit'
                 else:
                     return 'hit'
             elif sum_of_my_hand == 14 or sum_of_my_hand == 13:
                 if sum_of_dealers_hand < 5:
                     return 'hit'
                 elif sum_of_dealers_hand < 7:
-                    return 'double'
+                    if canDouble:
+                        return 'double'
+                    else:
+                        return 'hit'
                 else:
                     return 'hit'
         if sum_of_my_hand>=17:
-            return 'stay'
+            return 'stand'
         elif sum_of_my_hand<17 and sum_of_my_hand>=13:
             if sum_of_dealers_hand >= 6:
                 return 'hit'
             else:
-                return 'stay'
+                return 'stand'
         elif sum_of_my_hand == 12:
             if sum_of_dealers_hand < 4 or sum_of_dealers_hand>6:
                 return 'hit'
             else:
-                return 'stay'
+                return 'stand'
         elif sum_of_my_hand == 11:
             return 'double' 
         elif sum_of_my_hand == 10:
@@ -195,12 +233,9 @@ class Blackjack:
 
     def your_turn(self,dealers_hand,your_hand,bet):
         #Decisione Automatica
-        second_hand = []
         while(True):
             decision = self.correct_move(dealers_hand,your_hand)
-            if len(second_hand) > 0:
-                self.your_turn(dealers_hand,second_hand,bet)
-            if decision == 'stay':
+            if decision == 'stand':
                 break
             if decision == 'hit':
                 self.add_card(your_hand)
@@ -211,18 +246,21 @@ class Blackjack:
                 bet*=2
                 break
             if decision == 'split':
-                second_hand = [your_hand.pop()]
-                self.add_card(second_hand)
+                self.second_hand = [your_hand.pop()]
+                self.add_card(self.second_hand)
                 self.add_card(your_hand)
-        return bet,second_hand
+                if self.balance >= bet:
+                    self.balance -= bet
+                self.second_hand_bet = bet
+        return bet
 
     def dealers_turn(self,dealers_hand,your_hand):
         while self.sum_of_hand(dealers_hand)<17:
-            if not self.automatic:
+            if not self.auto_bet:
                 time.sleep(1)
             self.add_card(dealers_hand)
             self.print_table(dealers_hand,your_hand)
-            if not self.automatic:
+            if not self.auto_bet:
                 time.sleep(1)
 
     def control_who_won(self,dealers_hand,your_hand,bet):
@@ -261,42 +299,46 @@ class Blackjack:
                 print(f"Current count is: {self.current_count} and current length of deck is: {len(self.deck)}\nTrue count is: {self.true_count}")
                 print(f"Average count along the game: {(self.sum_of_counts/self.number_of_games):.2f}")
                 print(f"You have won {self.number_of_wins} out of {self.number_of_games} games, for a {(self.number_of_wins/self.number_of_games * 100):.2f}% winrate and a net gain of {self.balance - self.original_balance}")
-            return (self.sum_of_counts/self.number_of_games),self.number_of_wins,self.number_of_games,(self.balance - self.original_balance)
+                if self.number_of_games==0:
+                    self.number_of_games = 1
+            return self.sum_of_counts,self.number_of_wins,self.number_of_games,(self.balance - self.original_balance),self.balance
 
     def main(self):
         self.deposit()
         self.original_balance = self.balance
         if not self.automatic:
-            self.automatic = True if str(input("Want to auto-play? (y/n)")) == "y" else False
-            self.auto_bet = True if self.automatic else False 
+            #self.automatic = True if str(input("Want to auto-play? (y/n)")) == "y" else False
+            self.auto_bet = True if str(input("Want to auto-play? (y/n)")) == "y" else False
 
         while(True):
-            if len(self.deck ) <= self.deck_limit:
+            bet = self.control_bet()
+            if len(self.deck ) <= self.deck_limit or self.bust:
                 return self.stats()
-            
-            bet = self.control_bet(self.balance,self.auto_bet,self.true_count)
             self.balance -= bet
-            dealers_hand = [self.deck.pop()]
-            your_hand = [self.deck.pop(),self.deck.pop()]
+            self.dealers_hand = [self.deck.pop()]
+            self.hand = [self.deck.pop(),self.deck.pop()]
 
-            self.print_table(dealers_hand,your_hand)
+            self.print_table(self.dealers_hand,self.hand)
 
-            bet,second_hand = self.your_turn(dealers_hand,your_hand,bet)
-            self.dealers_turn(dealers_hand,your_hand)
-            self.control_who_won(dealers_hand,your_hand,bet)
-            if len(second_hand) > 0:
-                self.print_table(dealers_hand,second_hand)
-                self.control_who_won(dealers_hand,second_hand,bet)
-                self.current_count += self.count(second_hand)
+            firts_hand_bet = self.your_turn(self.dealers_hand,self.hand,bet)
+            self.dealers_turn(self.dealers_hand,self.hand)
+            self.control_who_won(self.dealers_hand,self.hand,firts_hand_bet)
+            if len(self.second_hand) > 0:
+                second_hand_bet = self.your_turn(self.dealers_hand,self.second_hand,bet)
+                self.print_table(self.dealers_hand,self.second_hand)
+                self.control_who_won(self.dealers_hand,self.second_hand,second_hand_bet)
+                self.current_count += self.count(self.second_hand)
                 self.sum_of_counts += self.current_count
+                self.second_hand = []
             
-            self.current_count += self.count(dealers_hand) + self.count(your_hand)
+            self.current_count += self.count(self.dealers_hand) + self.count(self.hand)
             self.sum_of_counts += self.current_count
             self.true_count = round(self.current_count/(round(len(self.deck)/52)))
             if not self.automatic:
                 print(f"Your current balance is: {self.balance}")
                 print(f"Current count is: {self.current_count} and current length of deck is: {len(self.deck)}\nTrue count is: {self.true_count}")
-                print(f"You have won {self.number_of_wins} out of {self.number_of_games} games, for a {(self.number_of_wins/self.number_of_games * 100):.2f}% winrate and a net gain of {self.balance - self.original_balance}")
+                if self.number_of_games != 0:
+                    print(f"You have won {self.number_of_wins} out of {self.number_of_games} games, for a {(self.number_of_wins/self.number_of_games * 100):.2f}% winrate and a net gain of {self.balance - self.original_balance}")
 
 def mean(list):
     sum = 0
@@ -308,18 +350,28 @@ avg_of_counts_in_games = []
 avg_of_wins = []
 avg_of_games = []
 avg_of_net_gains = []
+avg_of_balances = []
 
-for _ in range(1000):
-    b = Blackjack(100,True)
-    avg_count, wins, games, net_gain = b.main()
+
+balance = 100
+
+for _ in range(100):
+    b = Blackjack(balance,True)
+    b.main()
+    avg_count, wins, games, net_gain,balance = b.main()
     avg_count = round(avg_count,2)
     avg_of_counts_in_games.append(avg_count)
     avg_of_wins.append(wins)
     avg_of_games.append(games)
     avg_of_net_gains.append(net_gain)
+    avg_of_balances.append(balance)
 
 print("Statistics about this simulation:")
-print(f"Avg of running count in games:{mean(avg_of_counts_in_games)}")
+print(f"Avg of running count in games:{mean(avg_of_counts_in_games)/mean(avg_of_games):.2f}")
 print(f"Avg of games:{mean(avg_of_games)}")
 print(f"Avg of wins:{mean(avg_of_wins)}")
 print(f"Avg of net_gains:{mean(avg_of_net_gains)}")
+count_of_busts = avg_of_balances.count(0) + avg_of_balances.count(1) + avg_of_balances.count(2)+avg_of_balances.count(3)+avg_of_balances.count(4)+avg_of_balances.count(2.5)
+print(f"Busts:{count_of_busts}")
+print(avg_of_balances)
+print(f"Final balance:{avg_of_balances[-1]}")
